@@ -6,6 +6,13 @@
 #include <QJsonDocument>
 #include <QFile>
 #include <QString>
+#include <QByteArray>
+
+#include <cryptlib.h>
+#include <rsa.h>
+#include <osrng.h>
+#include <base64.h>
+#include <files.h>
 
 QT_BEGIN_NAMESPACE
 namespace Ui {
@@ -30,6 +37,12 @@ private slots:
     void autoFormatCVV(const QString &text);
 
 private:
+    void generateRSAKeys();
+    QString encryptData(const QString &data);
+
+private:
     Ui::MainWindow *ui;
+    CryptoPP::RSA::PublicKey publicKey;
+    CryptoPP::RSA::PrivateKey privateKey;
 };
 #endif // MAINWINDOW_H

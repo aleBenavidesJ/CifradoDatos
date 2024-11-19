@@ -8,6 +8,105 @@
 #include <QJsonObject>
 #include <QDebug>
 #include <QRegularExpression>
+#include <cryptlib.h>
+#include <rsa.h>
+#include <osrng.h>
+#include <base64.h>
+#include <files.h>
+#include <aes.h>
+#include <modes.h>
+#include <osrng.h>
+#include <filters.h>
+#include <secblock.h>
+
+void MainWindow::generateRSAKeys()
+{
+    CryptoPP::AutoSeededRandomPool rng;
+
+    // Generar claves RSA
+    CryptoPP::InvertibleRSAFunction params;
+    params.GenerateRandomWithKeySize(rng, 3072);
+
+    privateKey = CryptoPP::RSA::PrivateKey(params);
+    publicKey = CryptoPP::RSA::PublicKey(params);
+
+    // Opcional: guardar las claves en archivos (solo para referencia)
+    CryptoPP::Base64Encoder privKeysink(new CryptoPP::FileSink("private.key"));
+    privateKey.DEREncode(privKeysink);
+    privKeysink.MessageEnd();
+
+    CryptoPP::Base64Encoder pubKeysink(new CryptoPP::FileSink("public.key"));
+    publicKey.DEREncode(pubKeysink);
+    pubKeysink.MessageEnd();
+}
+
+QString MainWindow::encryptData(const QString &data)
+{
+    CryptoPP::AutoSeededRandomPool rng;
+
+    // Generar clave AES e IV
+    CryptoPP::SecByteBlock key(CryptoPP::AES::DEFAULT_KEYLENGTH); // 16 bytes
+    CryptoPP::SecByteBlock iv(CryptoPP::AES::BLOCKSIZE);         // 16 bytes
+    rng.GenerateBlock(key, key.size());
+    rng.GenerateBlock(iv, iv.size());
+
+    qDebug() << "Tamaño de la clave AES:" << key.size();
+    qDebug() << "Tamaño del IV:" << iv.size();
+
+    // Cifrar datos con AES
+    std::string plainText = data.toStdString();
+    std::string cipherText;
+
+    try {
+        CryptoPP::CBC_Mode<CryptoPP::AES>::Encryption aesEncryption(key, key.size(), iv);
+        CryptoPP::StringSource ss(plainText, true,
+                                  new CryptoPP::StreamTransformationFilter(aesEncryption,
+                                                                           new CryptoPP::StringSink(cipherText)
+                                                                           )
+                                  );
+    } catch (const CryptoPP::Exception &e) {
+        qDebug() << "Error en cifrado AES:" << e.what();
+        return "";
+    }
+
+    qDebug() << "Tamaño de los datos cifrados con AES:" << cipherText.size();
+
+    // Cifrar clave AES con RSA usando SHA-256 en OAEP
+    std::string encryptedKey, encryptedIV;
+    try {
+        CryptoPP::RSAES_OAEP_SHA_Encryptor rsaEncryptor(publicKey, new CryptoPP::SHA256());
+
+        // Cifrar clave AES
+        CryptoPP::StringSource ss1(std::string((const char*)key.data(), key.size()), true,
+                                   new CryptoPP::PK_EncryptorFilter(rng, rsaEncryptor,
+                                                                    new CryptoPP::StringSink(encryptedKey)
+                                                                    )
+                                   );
+
+        // Cifrar IV
+        CryptoPP::StringSource ss2(std::string((const char*)iv.data(), iv.size()), true,
+                                   new CryptoPP::PK_EncryptorFilter(rng, rsaEncryptor,
+                                                                    new CryptoPP::StringSink(encryptedIV)
+                                                                    )
+                                   );
+    } catch (const CryptoPP::Exception &e) {
+        qDebug() << "Error en cifrado RSA:" << e.what();
+        qDebug() << "Tamaño total de datos a cifrar:" << key.size() + iv.size();
+        return "";
+    }
+
+    qDebug() << "Cifrado RSA exitoso.";
+
+    // Combinar clave encriptada, IV y datos cifrados en Base64
+    std::string encoded;
+    CryptoPP::StringSource ss3(encryptedKey + encryptedIV + cipherText, true,
+                               new CryptoPP::Base64Encoder(
+                                   new CryptoPP::StringSink(encoded)
+                                   )
+                               );
+
+    return QString::fromStdString(encoded);
+}
 
 MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent)
@@ -28,6 +127,8 @@ MainWindow::MainWindow(QWidget *parent)
         );
 }
 
+
+
 MainWindow::~MainWindow()
 {
     delete ui;
@@ -35,10 +136,14 @@ MainWindow::~MainWindow()
 
 void MainWindow::saveToJson()
 {
-    QString filePath = R"(C:\Users\benav\OneDrive\Documentos\Datos2\CifradoDatos\users.json)";
+    QString filePath = R"(/home/braulio/Datos/CifradoDatos/users.json)";
+    QString encryptedFilePath = R"(/home/braulio/Datos/CifradoDatos/encrypted_users.json)";
     QFile file(filePath);
+    QFile encryptedFile(encryptedFilePath);
     QJsonArray usersArray;
+    QJsonArray encryptedArray;
 
+    // Leer archivo original
     if (file.exists() && file.open(QIODevice::ReadOnly)) {
         QByteArray fileData = file.readAll();
         file.close();
@@ -49,47 +154,81 @@ void MainWindow::saveToJson()
         }
     }
 
-    QJsonObject newUser;
-    newUser["cedula"] = ui->lineEdit->text();
-    newUser["nombre"] = ui->lineEdit_1->text();
-    newUser["apellidos"] = ui->lineEdit_2->text();
-    newUser["telefono"] = ui->lineEdit_3->text();
-    newUser["numero_tarjeta"] = ui->lineEdit_4->text();
-    newUser["fecha_expiracion"] = ui->lineEdit_5->text();
-    newUser["cvv"] = ui->lineEdit_6->text();
+    // Leer archivo encriptado
+    if (encryptedFile.exists() && encryptedFile.open(QIODevice::ReadOnly)) {
+        QByteArray fileData = encryptedFile.readAll();
+        encryptedFile.close();
 
-    if (newUser["cedula"].toString().isEmpty() ||
-        newUser["nombre"].toString().isEmpty() ||
-        newUser["apellidos"].toString().isEmpty() ||
-        newUser["telefono"].toString().isEmpty() ||
-        newUser["numero_tarjeta"].toString().isEmpty() ||
-        newUser["fecha_expiracion"].toString().isEmpty() ||
-        newUser["cvv"].toString().isEmpty())
-    {
+        QJsonDocument doc = QJsonDocument::fromJson(fileData);
+        if (!doc.isNull() && doc.isArray()) {
+            encryptedArray = doc.array();
+        }
+    }
+
+    QJsonObject newUser;
+    QJsonObject encryptedUser;
+
+    QString cedula = ui->lineEdit->text();
+    QString nombre = ui->lineEdit_1->text();
+    QString apellidos = ui->lineEdit_2->text();
+    QString telefono = ui->lineEdit_3->text();
+    QString numeroTarjeta = ui->lineEdit_4->text();
+    QString fechaExpiracion = ui->lineEdit_5->text();
+    QString cvv = ui->lineEdit_6->text();
+
+    if (cedula.isEmpty() || nombre.isEmpty() || apellidos.isEmpty() || telefono.isEmpty() || numeroTarjeta.isEmpty() || fechaExpiracion.isEmpty() || cvv.isEmpty()) {
         statusBar()->showMessage("Por favor, complete todos los campos.", 3000);
         return;
     }
 
+    // Guardar datos sin cifrar
+    newUser["cedula"] = cedula;
+    newUser["nombre"] = nombre;
+    newUser["apellidos"] = apellidos;
+    newUser["telefono"] = telefono;
+    newUser["numero_tarjeta"] = numeroTarjeta;
+    newUser["fecha_expiracion"] = fechaExpiracion;
+    newUser["cvv"] = cvv;
+
     usersArray.append(newUser);
 
+    // Cifrar datos y guardar
+    //encryptedUser["cedula"] = encryptData(cedula);
+    //encryptedUser["nombre"] = encryptData(nombre);
+    //encryptedUser["apellidos"] = encryptData(apellidos);
+    //encryptedUser["telefono"] = encryptData(telefono);
+    //encryptedUser["numero_tarjeta"] = encryptData(numeroTarjeta);
+    //encryptedUser["fecha_expiracion"] = encryptData(fechaExpiracion);
+    encryptedUser["cvv"] = encryptData(cvv);
+
+    encryptedArray.append(encryptedUser);
+
+    // Escribir datos sin cifrar
     if (file.open(QIODevice::WriteOnly)) {
         QJsonDocument doc(usersArray);
         file.write(doc.toJson());
         file.close();
-        qDebug() << "Datos guardados en:" << filePath;
-        statusBar()->showMessage("Usuario registrado exitosamente.", 3000);
-        ui->lineEdit->clear();
-        ui->lineEdit_1->clear();
-        ui->lineEdit_2->clear();
-        ui->lineEdit_3->clear();
-        ui->lineEdit_4->clear();
-        ui->lineEdit_5->clear();
-        ui->lineEdit_6->clear();
-    } else {
-        statusBar()->showMessage("Error al guardar los datos.", 3000);
-        qDebug() << "Error al abrir el archivo para escritura en:" << filePath;
     }
+
+    // Escribir datos cifrados
+    if (encryptedFile.open(QIODevice::WriteOnly)) {
+        QJsonDocument doc(encryptedArray);
+        encryptedFile.write(doc.toJson());
+        encryptedFile.close();
+    }
+
+    statusBar()->showMessage("Usuario registrado exitosamente.", 3000);
+
+    // Limpiar campos
+    ui->lineEdit->clear();
+    ui->lineEdit_1->clear();
+    ui->lineEdit_2->clear();
+    ui->lineEdit_3->clear();
+    ui->lineEdit_4->clear();
+    ui->lineEdit_5->clear();
+    ui->lineEdit_6->clear();
 }
+
 
 void MainWindow::autoFormatCedula(const QString &text)
 {
