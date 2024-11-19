@@ -18,14 +18,18 @@
 #include <osrng.h>
 #include <filters.h>
 #include <secblock.h>
+#include <string>
+
+using namespace std;
+using namespace CryptoPP;
 
 void MainWindow::generateRSAKeys()
 {
-    CryptoPP::AutoSeededRandomPool rng;
+    CryptoPP::AutoSeededRandomPool prng;
 
     // Generar claves RSA
     CryptoPP::InvertibleRSAFunction params;
-    params.GenerateRandomWithKeySize(rng, 3072);
+    params.GenerateRandomWithKeySize(prng, 3072);
 
     privateKey = CryptoPP::RSA::PrivateKey(params);
     publicKey = CryptoPP::RSA::PublicKey(params);
@@ -40,73 +44,7 @@ void MainWindow::generateRSAKeys()
     pubKeysink.MessageEnd();
 }
 
-QString MainWindow::encryptData(const QString &data)
-{
-    CryptoPP::AutoSeededRandomPool rng;
 
-    // Generar clave AES e IV
-    CryptoPP::SecByteBlock key(CryptoPP::AES::DEFAULT_KEYLENGTH); // 16 bytes
-    CryptoPP::SecByteBlock iv(CryptoPP::AES::BLOCKSIZE);         // 16 bytes
-    rng.GenerateBlock(key, key.size());
-    rng.GenerateBlock(iv, iv.size());
-
-    qDebug() << "Tamaño de la clave AES:" << key.size();
-    qDebug() << "Tamaño del IV:" << iv.size();
-
-    // Cifrar datos con AES
-    std::string plainText = data.toStdString();
-    std::string cipherText;
-
-    try {
-        CryptoPP::CBC_Mode<CryptoPP::AES>::Encryption aesEncryption(key, key.size(), iv);
-        CryptoPP::StringSource ss(plainText, true,
-                                  new CryptoPP::StreamTransformationFilter(aesEncryption,
-                                                                           new CryptoPP::StringSink(cipherText)
-                                                                           )
-                                  );
-    } catch (const CryptoPP::Exception &e) {
-        qDebug() << "Error en cifrado AES:" << e.what();
-        return "";
-    }
-
-    qDebug() << "Tamaño de los datos cifrados con AES:" << cipherText.size();
-
-    // Cifrar clave AES con RSA usando SHA-256 en OAEP
-    std::string encryptedKey, encryptedIV;
-    try {
-        CryptoPP::RSAES_OAEP_SHA_Encryptor rsaEncryptor(publicKey, new CryptoPP::SHA256());
-
-        // Cifrar clave AES
-        CryptoPP::StringSource ss1(std::string((const char*)key.data(), key.size()), true,
-                                   new CryptoPP::PK_EncryptorFilter(rng, rsaEncryptor,
-                                                                    new CryptoPP::StringSink(encryptedKey)
-                                                                    )
-                                   );
-
-        // Cifrar IV
-        CryptoPP::StringSource ss2(std::string((const char*)iv.data(), iv.size()), true,
-                                   new CryptoPP::PK_EncryptorFilter(rng, rsaEncryptor,
-                                                                    new CryptoPP::StringSink(encryptedIV)
-                                                                    )
-                                   );
-    } catch (const CryptoPP::Exception &e) {
-        qDebug() << "Error en cifrado RSA:" << e.what();
-        qDebug() << "Tamaño total de datos a cifrar:" << key.size() + iv.size();
-        return "";
-    }
-
-    qDebug() << "Cifrado RSA exitoso.";
-
-    // Combinar clave encriptada, IV y datos cifrados en Base64
-    std::string encoded;
-    CryptoPP::StringSource ss3(encryptedKey + encryptedIV + cipherText, true,
-                               new CryptoPP::Base64Encoder(
-                                   new CryptoPP::StringSink(encoded)
-                                   )
-                               );
-
-    return QString::fromStdString(encoded);
-}
 
 MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent)
@@ -126,8 +64,6 @@ MainWindow::MainWindow(QWidget *parent)
         "QPushButton:hover { background-color: #45a049; }"
         );
 }
-
-
 
 MainWindow::~MainWindow()
 {
@@ -168,38 +104,78 @@ void MainWindow::saveToJson()
     QJsonObject newUser;
     QJsonObject encryptedUser;
 
-    QString cedula = ui->lineEdit->text();
-    QString nombre = ui->lineEdit_1->text();
-    QString apellidos = ui->lineEdit_2->text();
-    QString telefono = ui->lineEdit_3->text();
-    QString numeroTarjeta = ui->lineEdit_4->text();
-    QString fechaExpiracion = ui->lineEdit_5->text();
-    QString cvv = ui->lineEdit_6->text();
+    QString cedulaQT = ui->lineEdit->text();
+    QString nombreQT = ui->lineEdit_1->text();
+    QString apellidosQT = ui->lineEdit_2->text();
+    QString telefonoQT = ui->lineEdit_3->text();
+    QString numeroTarjetaQT = ui->lineEdit_4->text();
+    QString fechaExpiracionQT = ui->lineEdit_5->text();
+    QString cvvQT = ui->lineEdit_6->text();
 
-    if (cedula.isEmpty() || nombre.isEmpty() || apellidos.isEmpty() || telefono.isEmpty() || numeroTarjeta.isEmpty() || fechaExpiracion.isEmpty() || cvv.isEmpty()) {
+    string cedula = ui->lineEdit->text().toStdString();
+    string nombre = ui->lineEdit_1->text().toStdString();
+    string apellidos = ui->lineEdit_2->text().toStdString();
+    string telefono = ui->lineEdit_3->text().toStdString();
+    string numeroTarjeta = ui->lineEdit_4->text().toStdString();
+    string fechaExpiracion = ui->lineEdit_5->text().toStdString();
+    string cvv = ui->lineEdit_6->text().toStdString();
+
+    if (cedulaQT.isEmpty() || nombreQT.isEmpty() || apellidosQT.isEmpty() || telefonoQT.isEmpty() || numeroTarjetaQT.isEmpty() || fechaExpiracionQT.isEmpty() || cvvQT.isEmpty()) {
         statusBar()->showMessage("Por favor, complete todos los campos.", 3000);
         return;
     }
 
     // Guardar datos sin cifrar
-    newUser["cedula"] = cedula;
-    newUser["nombre"] = nombre;
-    newUser["apellidos"] = apellidos;
-    newUser["telefono"] = telefono;
-    newUser["numero_tarjeta"] = numeroTarjeta;
-    newUser["fecha_expiracion"] = fechaExpiracion;
-    newUser["cvv"] = cvv;
+    newUser["cedula"] = cedulaQT;
+    newUser["nombre"] = nombreQT;
+    newUser["apellidos"] = apellidosQT;
+    newUser["telefono"] = telefonoQT;
+    newUser["numero_tarjeta"] = numeroTarjetaQT;
+    newUser["fecha_expiracion"] = fechaExpiracionQT;
+    newUser["cvv"] = cvvQT;
 
     usersArray.append(newUser);
 
+    AutoSeededRandomPool prng;
+
+    InvertibleRSAFunction params;
+    params.GenerateRandomWithKeySize(prng, 2048);
+
+    RSA::PrivateKey privateKey(params);
+    RSA::PublicKey publicKey(params);
+    RSAES_OAEP_SHA_Encryptor encryptor(publicKey);
+
+
+    std::string cipherCedula, cipherNombre, cipherApellidos, cipherTelefono, cipherTarjeta, cipherExpiracion, cipherCVV;
     // Cifrar datos y guardar
-    //encryptedUser["cedula"] = encryptData(cedula);
-    //encryptedUser["nombre"] = encryptData(nombre);
-    //encryptedUser["apellidos"] = encryptData(apellidos);
-    //encryptedUser["telefono"] = encryptData(telefono);
-    //encryptedUser["numero_tarjeta"] = encryptData(numeroTarjeta);
-    //encryptedUser["fecha_expiracion"] = encryptData(fechaExpiracion);
-    encryptedUser["cvv"] = encryptData(cvv);
+
+    // Cedula
+    StringSource(cedula, true, new PK_EncryptorFilter(prng, encryptor, new StringSink(cedula)));
+    encryptedUser["cedula"] = QString::fromStdString(cedula);
+
+    // Nombre
+    StringSource(nombre, true, new PK_EncryptorFilter(prng, encryptor, new StringSink(nombre)));
+    encryptedUser["nombre"] = QString::fromStdString(nombre);
+
+    // Apellidos
+    StringSource(apellidos, true, new PK_EncryptorFilter(prng, encryptor, new StringSink(apellidos)));
+    encryptedUser["apellidos"] = QString::fromStdString(apellidos);
+
+    // Telefono
+    StringSource(telefono, true, new PK_EncryptorFilter(prng, encryptor, new StringSink(telefono)));
+    encryptedUser["telefono"] = QString::fromStdString(telefono);
+
+    // Tarjeta
+    StringSource(numeroTarjeta, true, new PK_EncryptorFilter(prng, encryptor, new StringSink(numeroTarjeta)));
+    encryptedUser["numero_tarjeta"] = QString::fromStdString(numeroTarjeta);
+
+    // Expiracion
+    StringSource(fechaExpiracion, true, new PK_EncryptorFilter(prng, encryptor, new StringSink(fechaExpiracion)));
+    encryptedUser["fecha_expiracion"] = QString::fromStdString(fechaExpiracion);
+
+    // CVV
+    StringSource(cvv, true, new PK_EncryptorFilter(prng, encryptor, new StringSink(cvv)));
+    encryptedUser["cvv"] = QString::fromStdString(cvv);
 
     encryptedArray.append(encryptedUser);
 
