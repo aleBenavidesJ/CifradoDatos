@@ -23,29 +23,6 @@
 using namespace std;
 using namespace CryptoPP;
 
-void MainWindow::generateRSAKeys()
-{
-    CryptoPP::AutoSeededRandomPool prng;
-
-    // Generar claves RSA
-    CryptoPP::InvertibleRSAFunction params;
-    params.GenerateRandomWithKeySize(prng, 3072);
-
-    privateKey = CryptoPP::RSA::PrivateKey(params);
-    publicKey = CryptoPP::RSA::PublicKey(params);
-
-    // Opcional: guardar las claves en archivos (solo para referencia)
-    CryptoPP::Base64Encoder privKeysink(new CryptoPP::FileSink("private.key"));
-    privateKey.DEREncode(privKeysink);
-    privKeysink.MessageEnd();
-
-    CryptoPP::Base64Encoder pubKeysink(new CryptoPP::FileSink("public.key"));
-    publicKey.DEREncode(pubKeysink);
-    pubKeysink.MessageEnd();
-}
-
-
-
 MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent)
     , ui(new Ui::MainWindow)
@@ -120,6 +97,15 @@ void MainWindow::saveToJson()
     string fechaExpiracion = ui->lineEdit_5->text().toStdString();
     string cvv = ui->lineEdit_6->text().toStdString();
 
+    if (ui->lineEdit->text().length() < 9 ||  // Cédula
+        ui->lineEdit_3->text().length() < 8 ||  // Teléfono
+        ui->lineEdit_4->text().length() < 19 || // Tarjeta (incluye espacios)
+        ui->lineEdit_5->text().length() < 5 ||  // Fecha de expiración (MM/AA)
+        ui->lineEdit_6->text().length() < 3)    // CVV
+    {
+        statusBar()->showMessage("Por favor, complete los campos correctamente.", 3000);
+        return;
+    }
     if (cedulaQT.isEmpty() || nombreQT.isEmpty() || apellidosQT.isEmpty() || telefonoQT.isEmpty() || numeroTarjetaQT.isEmpty() || fechaExpiracionQT.isEmpty() || cvvQT.isEmpty()) {
         statusBar()->showMessage("Por favor, complete todos los campos.", 3000);
         return;
@@ -150,32 +136,32 @@ void MainWindow::saveToJson()
     // Cifrar datos y guardar
 
     // Cedula
-    StringSource(cedula, true, new PK_EncryptorFilter(prng, encryptor, new StringSink(cedula)));
-    encryptedUser["cedula"] = QString::fromStdString(cedula);
+    StringSource(cedula, true, new PK_EncryptorFilter(prng, encryptor, new StringSink(cipherCedula)));
+    encryptedUser["cedula"] = QString::fromStdString(cipherCedula);
 
     // Nombre
-    StringSource(nombre, true, new PK_EncryptorFilter(prng, encryptor, new StringSink(nombre)));
-    encryptedUser["nombre"] = QString::fromStdString(nombre);
+    StringSource(nombre, true, new PK_EncryptorFilter(prng, encryptor, new StringSink(cipherNombre)));
+    encryptedUser["nombre"] = QString::fromStdString(cipherNombre);
 
     // Apellidos
-    StringSource(apellidos, true, new PK_EncryptorFilter(prng, encryptor, new StringSink(apellidos)));
-    encryptedUser["apellidos"] = QString::fromStdString(apellidos);
+    StringSource(apellidos, true, new PK_EncryptorFilter(prng, encryptor, new StringSink(cipherApellidos)));
+    encryptedUser["apellidos"] = QString::fromStdString(cipherApellidos);
 
     // Telefono
-    StringSource(telefono, true, new PK_EncryptorFilter(prng, encryptor, new StringSink(telefono)));
-    encryptedUser["telefono"] = QString::fromStdString(telefono);
+    StringSource(telefono, true, new PK_EncryptorFilter(prng, encryptor, new StringSink(cipherTelefono)));
+    encryptedUser["telefono"] = QString::fromStdString(cipherTelefono);
 
     // Tarjeta
-    StringSource(numeroTarjeta, true, new PK_EncryptorFilter(prng, encryptor, new StringSink(numeroTarjeta)));
-    encryptedUser["numero_tarjeta"] = QString::fromStdString(numeroTarjeta);
+    StringSource(numeroTarjeta, true, new PK_EncryptorFilter(prng, encryptor, new StringSink(cipherTarjeta)));
+    encryptedUser["numero_tarjeta"] = QString::fromStdString(cipherTarjeta);
 
     // Expiracion
-    StringSource(fechaExpiracion, true, new PK_EncryptorFilter(prng, encryptor, new StringSink(fechaExpiracion)));
-    encryptedUser["fecha_expiracion"] = QString::fromStdString(fechaExpiracion);
+    StringSource(fechaExpiracion, true, new PK_EncryptorFilter(prng, encryptor, new StringSink(cipherExpiracion)));
+    encryptedUser["fecha_expiracion"] = QString::fromStdString(cipherExpiracion);
 
     // CVV
-    StringSource(cvv, true, new PK_EncryptorFilter(prng, encryptor, new StringSink(cvv)));
-    encryptedUser["cvv"] = QString::fromStdString(cvv);
+    StringSource(cvv, true, new PK_EncryptorFilter(prng, encryptor, new StringSink(cipherCVV)));
+    encryptedUser["cvv"] = QString::fromStdString(cipherCVV);
 
     encryptedArray.append(encryptedUser);
 

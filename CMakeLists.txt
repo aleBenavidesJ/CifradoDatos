@@ -23,6 +23,7 @@ set(PROJECT_SOURCES
         mainwindow.h
         mainwindow.ui
         users.json
+        encrypted_users.json
         ${TS_FILES}
 )
 
