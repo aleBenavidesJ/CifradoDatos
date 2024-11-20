@@ -89,13 +89,13 @@ void MainWindow::saveToJson()
     QString fechaExpiracionQT = ui->lineEdit_5->text();
     QString cvvQT = ui->lineEdit_6->text();
 
-    string cedula = ui->lineEdit->text().toStdString();
-    string nombre = ui->lineEdit_1->text().toStdString();
-    string apellidos = ui->lineEdit_2->text().toStdString();
-    string telefono = ui->lineEdit_3->text().toStdString();
-    string numeroTarjeta = ui->lineEdit_4->text().toStdString();
-    string fechaExpiracion = ui->lineEdit_5->text().toStdString();
-    string cvv = ui->lineEdit_6->text().toStdString();
+    string cedula = cedulaQT.toStdString();
+    string nombre = nombreQT.toStdString();
+    string apellidos = apellidosQT.toStdString();
+    string telefono = telefonoQT.toStdString();
+    string numeroTarjeta = numeroTarjetaQT.toStdString();
+    string fechaExpiracion = fechaExpiracionQT.toStdString();
+    string cvv = cvvQT.toStdString();
 
     if (ui->lineEdit->text().length() < 9 ||  // Cédula
         ui->lineEdit_3->text().length() < 8 ||  // Teléfono
@@ -132,12 +132,15 @@ void MainWindow::saveToJson()
     RSAES_OAEP_SHA_Encryptor encryptor(publicKey);
 
 
-    std::string cipherCedula, cipherNombre, cipherApellidos, cipherTelefono, cipherTarjeta, cipherExpiracion, cipherCVV;
+    std::string cipherCedula, cipherNombre, cipherApellidos, cipherTelefono, cipherTarjeta, cipherExpiracion, cipherCVV, decryptedText;
     // Cifrar datos y guardar
 
     // Cedula
     StringSource(cedula, true, new PK_EncryptorFilter(prng, encryptor, new StringSink(cipherCedula)));
     encryptedUser["cedula"] = QString::fromStdString(cipherCedula);
+    //RSAES_OAEP_SHA_Decryptor decryptor(privateKey);
+    //StringSource(cipherCedula, true, new PK_DecryptorFilter(prng, decryptor, new StringSink(decryptedText)));
+    //cout << decryptedText << endl;
 
     // Nombre
     StringSource(nombre, true, new PK_EncryptorFilter(prng, encryptor, new StringSink(cipherNombre)));
